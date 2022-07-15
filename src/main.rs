@@ -1,5 +1,3 @@
-use actix_web;
-
 use sqlx::PgPool;
 use z2p::{configuration::get_configuration, run};
 
