@@ -1,13 +1,53 @@
 #[cfg(test)]
 mod tests {
 
-    use actix_web::{test, App};
-    use sqlx::{Connection, PgConnection};
+    use actix_web::{test, web, App};
+    use sqlx::{Connection, Executor, PgConnection, PgPool};
+    use uuid::Uuid;
     use z2p::{configuration::get_configuration, startup::routing};
+
+    async fn init_db() -> PgPool {
+        let mut configuration = get_configuration().expect("Failed to read configuration.");
+        // Generate random name for db
+        configuration.database.database_name = Uuid::new_v4().to_string();
+
+        // Create database
+        let mut connection =
+            PgConnection::connect(&configuration.database.connection_string_without_db())
+                .await
+                .expect("Failed to connect to Postgres");
+        connection
+            .execute(
+                format!(
+                    r#"CREATE DATABASE "{}";"#,
+                    configuration.database.database_name
+                )
+                .as_str(),
+            )
+            .await
+            .expect("Failed to create database.");
+
+        // Migrate database
+        let connection_pool = PgPool::connect(&configuration.database.connection_string())
+            .await
+            .expect("Failed to connect to Postgres.");
+        sqlx::migrate!("./migrations")
+            .run(&connection_pool)
+            .await
+            .expect("Failed to migrate the database");
+
+        connection_pool
+    }
 
     #[actix_web::test]
     async fn health_check_works() {
-        let app = test::init_service(App::new().configure(routing)).await;
+        let pool = init_db().await;
+        let app = test::init_service(
+            App::new()
+                .configure(routing)
+                .app_data(web::Data::new(pool.clone())),
+        )
+        .await;
 
         let req = test::TestRequest::get().uri("/health_check").to_request();
 
@@ -21,7 +61,13 @@ mod tests {
 
     #[actix_web::test]
     async fn subscriber_ok_valid_data() {
-        let app = test::init_service(App::new().configure(routing)).await;
+        let pool = init_db().await;
+        let app = test::init_service(
+            App::new()
+                .configure(routing)
+                .app_data(web::Data::new(pool.clone())),
+        )
+        .await;
 
         let body = "name=le%20guin&email=ursula_le_guin%40gmail.com";
         let req = test::TestRequest::post()
@@ -30,19 +76,12 @@ mod tests {
             .set_payload(body)
             .to_request();
 
-        let configuration = get_configuration().expect("Failed to read configuration");
-        let connection_string = configuration.database.connection_string();
-
-        let mut connection = PgConnection::connect(&connection_string)
-            .await
-            .expect("Failed to connect to Postgres.");
-
         let resp = test::call_service(&app, req).await;
 
         assert_eq!(resp.status().as_u16(), 200);
 
         let saved = sqlx::query!("SELECT email, name FROM subscriptions",)
-            .fetch_one(&mut connection)
+            .fetch_one(&pool)
             .await
             .expect("Failed to fetch saved subscription.");
         assert_eq!(saved.email, "ursula_le_guin@gmail.com");
@@ -51,7 +90,13 @@ mod tests {
 
     #[actix_web::test]
     async fn subscriber_invlaid_data_code() {
-        let app = test::init_service(App::new().configure(routing)).await;
+        let pool = init_db().await;
+        let app = test::init_service(
+            App::new()
+                .configure(routing)
+                .app_data(web::Data::new(pool.clone())),
+        )
+        .await;
 
         let bodys = vec![
             ("name=le%20guin", "Empty mail"),
