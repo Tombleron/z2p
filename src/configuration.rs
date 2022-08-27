@@ -1,3 +1,4 @@
+/// Module for configuration loading and processing
 use config::Config;
 use serde::Deserialize;
 
@@ -24,6 +25,8 @@ impl DatabaseConfig {
         )
     }
 
+    // Function for testing purposes
+    // Connects to db without specified database
     pub fn connection_string_without_db(&self) -> String {
         format!(
             "postgres://{}:{}@{}:{}",
