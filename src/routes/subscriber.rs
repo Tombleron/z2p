@@ -20,7 +20,6 @@ pub struct Subscriber {
     name = "Adding new user",
     skip(form, pool),
     fields(
-        request_id = %Uuid::new_v4(),
         subscriber_email = %form.email,
         subscriber_name= %form.name
     )
@@ -30,16 +29,11 @@ pub async fn subscribe(form: web::Form<Subscriber>, pool: web::Data<PgPool>) -> 
         Ok(_) => HttpResponse::Ok(),
         Err(_) => HttpResponse::InternalServerError(),
     }
+    .await
 }
 
-#[tracing::instrument(
-    name = "Inserting new user to database",
-    skip(data, pool),
-)]
-async fn insert_subscriber(
-    data: &Subscriber,
-    pool: &PgPool,
-) -> Result<(), sqlx::Error> {
+#[tracing::instrument(name = "Inserting new user to database", skip(data, pool))]
+async fn insert_subscriber(data: &Subscriber, pool: &PgPool) -> Result<(), sqlx::Error> {
     sqlx::query!(
         r#"
         INSERT INTO subscriptions (id, email, name, subscribed_at)

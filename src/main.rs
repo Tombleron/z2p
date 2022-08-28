@@ -11,7 +11,7 @@ async fn main() -> std::io::Result<()> {
     // Load app configuration (NOTE: stored in config.yaml)
     let config = get_configuration().expect("Error loading configuration.");
 
-    let connection = PgPool::connect(&config.database.connection_string().expose_secret())
+    let connection = PgPool::connect(config.database.connection_string().expose_secret())
         .await
         .expect("Error connecting to db.");
 

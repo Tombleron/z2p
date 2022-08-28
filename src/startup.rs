@@ -3,8 +3,9 @@ use crate::configuration::Configuration;
 
 use super::routes::*;
 
-use actix_web::{middleware::Logger, web, App, HttpServer};
+use actix_web::{web, App, HttpServer};
 use sqlx::PgPool;
+use tracing_actix_web::TracingLogger;
 
 /// This needed to easily start app while testing
 /// Combines all routes for the app
@@ -18,7 +19,7 @@ pub async fn run(cfg: &Configuration, connection: PgPool) -> std::io::Result<()>
 
     HttpServer::new(move || {
         App::new()
-            .wrap(Logger::default())
+            .wrap(TracingLogger::default())
             .configure(routing)
             .app_data(connection.clone())
     })
