@@ -1,11 +1,47 @@
 #[cfg(test)]
 mod tests {
 
-    use actix_web::{test, web, App};
+    use actix_web::{middleware::Logger, test, web, App};
+    use once_cell::sync::Lazy;
     use sqlx::{Connection, Executor, PgConnection, PgPool};
     use uuid::Uuid;
-    use z2p::{configuration::get_configuration, startup::routing};
+    use z2p::{configuration::get_configuration, logging::*, startup::routing};
 
+    // Ensure that the `tracing` stack is only initialised once using `once_cell`
+    static TRACING: Lazy<()> = Lazy::new(|| {
+        let default_filter_level = "info".to_string();
+        let subscriber_name = "test".to_string();
+
+        if std::env::var("TEST_LOG").is_ok() {
+            let subscriber = get_subscriber(subscriber_name, default_filter_level, std::io::stdout);
+            init_subscriber(subscriber);
+        } else {
+            let subscriber = get_subscriber(subscriber_name, default_filter_level, std::io::sink);
+            init_subscriber(subscriber);
+        }
+    });
+
+    /// Macro rule for app initialization to reduce boilerplate
+    macro_rules! app_init {
+        () => {{
+            Lazy::force(&TRACING);
+
+            let pool = init_db().await;
+
+            let app = test::init_service(
+                App::new()
+                    .wrap(Logger::default())
+                    .configure(routing)
+                    .app_data(web::Data::new(pool.clone())),
+            )
+            .await;
+
+            (app, pool)
+        }};
+    }
+
+    /// Database initialization function for tests
+    /// Creates database with random name to prevent collisions
     async fn init_db() -> PgPool {
         let mut configuration = get_configuration().expect("Failed to read configuration.");
         // Generate random name for db
@@ -16,6 +52,7 @@ mod tests {
             PgConnection::connect(&configuration.database.connection_string_without_db())
                 .await
                 .expect("Failed to connect to Postgres");
+
         connection
             .execute(
                 format!(
@@ -31,6 +68,7 @@ mod tests {
         let connection_pool = PgPool::connect(&configuration.database.connection_string())
             .await
             .expect("Failed to connect to Postgres.");
+
         sqlx::migrate!("./migrations")
             .run(&connection_pool)
             .await
@@ -41,13 +79,7 @@ mod tests {
 
     #[actix_web::test]
     async fn health_check_works() {
-        let pool = init_db().await;
-        let app = test::init_service(
-            App::new()
-                .configure(routing)
-                .app_data(web::Data::new(pool.clone())),
-        )
-        .await;
+        let (app, _) = app_init!();
 
         let req = test::TestRequest::get().uri("/health_check").to_request();
 
@@ -61,13 +93,7 @@ mod tests {
 
     #[actix_web::test]
     async fn subscriber_ok_valid_data() {
-        let pool = init_db().await;
-        let app = test::init_service(
-            App::new()
-                .configure(routing)
-                .app_data(web::Data::new(pool.clone())),
-        )
-        .await;
+        let (app, pool) = app_init!();
 
         let body = "name=le%20guin&email=ursula_le_guin%40gmail.com";
         let req = test::TestRequest::post()
