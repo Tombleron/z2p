@@ -1,5 +1,5 @@
 use secrecy::ExposeSecret;
-use sqlx::PgPool;
+use sqlx::postgres::PgPoolOptions;
 use z2p::{configuration::get_configuration, logging::*, run};
 
 #[actix_web::main]
@@ -11,8 +11,9 @@ async fn main() -> std::io::Result<()> {
     // Load app configuration (NOTE: stored in config.yaml)
     let config = get_configuration().expect("Error loading configuration.");
 
-    let connection = PgPool::connect(config.database.connection_string().expose_secret())
-        .await
+    let connection = PgPoolOptions::new()
+        .acquire_timeout(std::time::Duration::from_secs(2))
+        .connect_lazy(config.database.connection_string().expose_secret())
         .expect("Error connecting to db.");
 
     run(&config, connection).await

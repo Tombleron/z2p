@@ -23,7 +23,7 @@ pub async fn run(cfg: &Configuration, connection: PgPool) -> std::io::Result<()>
             .configure(routing)
             .app_data(connection.clone())
     })
-    .bind(("127.0.0.1", cfg.app_port))?
+    .bind((cfg.application.host.to_owned(), cfg.application.port))?
     .run()
     .await
 }

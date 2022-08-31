@@ -1,12 +1,18 @@
 /// Module for configuration loading and processing
-use config::Config;
+use config::{Config, File};
 use secrecy::{ExposeSecret, Secret};
 use serde::Deserialize;
 
 #[derive(Deserialize)]
 pub struct Configuration {
-    pub app_port: u16,
+    pub application: ApplicationSettings,
     pub database: DatabaseConfig,
+}
+
+#[derive(Deserialize)]
+pub struct ApplicationSettings {
+    pub host: String,
+    pub port: u16,
 }
 
 #[derive(Deserialize)]
@@ -43,10 +49,51 @@ impl DatabaseConfig {
     }
 }
 
+/// Get app configuration from config files
 pub fn get_configuration() -> Result<Configuration, config::ConfigError> {
-    let settings = Config::builder()
-        .add_source(config::File::with_name("config.yaml"))
+    let base_path = std::env::current_dir().expect("Failed to determine the current directory.");
+    let config_dir = base_path.join("cfg");
+
+    let environment: AppEnvironment = std::env::var("APP_ENV")
+        .unwrap_or_else(|_| "local".into())
+        .try_into()
+        .expect("Error parsing APP_ENV");
+
+    let s = Config::builder()
+        // Start off by merging in the "default" configuration file
+        .add_source(File::from(config_dir.join("base")))
+        // Add in the current environment file
+        .add_source(File::from(config_dir.join(environment.as_str())))
         .build()?;
 
-    settings.try_deserialize::<Configuration>()
+    s.try_deserialize()
+}
+
+/// Possible environments for app
+enum AppEnvironment {
+    Local,
+    Production,
+}
+
+impl AppEnvironment {
+    fn as_str(&self) -> &'static str {
+        match self {
+            AppEnvironment::Local => "local",
+            AppEnvironment::Production => "prod",
+        }
+    }
+}
+
+impl TryFrom<String> for AppEnvironment {
+    type Error = String;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        match value.to_lowercase().as_str() {
+            "local" => Ok(AppEnvironment::Local),
+            "prod" => Ok(AppEnvironment::Production),
+            other => Err(format!(
+                "{other} is not supported environment. Use either `local` or `prod`."
+            )),
+        }
+    }
 }
