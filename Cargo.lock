@@ -1395,6 +1395,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde-aux"
+version = "4.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c79c1a5a310c28bf9f7a4b9bd848553051120d80a5952f993c7eb62f6ed6e4c5"
+dependencies = [
+ "chrono",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "serde_derive"
 version = "1.0.144"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2149,6 +2160,7 @@ dependencies = [
  "once_cell",
  "secrecy",
  "serde",
+ "serde-aux",
  "sqlx",
  "tracing",
  "tracing-actix-web",

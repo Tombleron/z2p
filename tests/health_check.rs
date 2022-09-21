@@ -3,7 +3,6 @@ mod tests {
 
     use actix_web::{middleware::Logger, test, web, App};
     use once_cell::sync::Lazy;
-    use secrecy::ExposeSecret;
     use sqlx::{Connection, Executor, PgConnection, PgPool};
     use uuid::Uuid;
     use z2p::{configuration::get_configuration, logging::*, startup::routing};
@@ -49,11 +48,10 @@ mod tests {
         configuration.database.database_name = Uuid::new_v4().to_string();
 
         // Create database
-        let mut connection = PgConnection::connect(
+        let mut connection = PgConnection::connect_with(
             &configuration
                 .database
-                .connection_string_without_db()
-                .expose_secret(),
+                .without_db()
         )
         .await
         .expect("Failed to connect to Postgres");
@@ -71,7 +69,7 @@ mod tests {
 
         // Migrate database
         let connection_pool =
-            PgPool::connect(&configuration.database.connection_string().expose_secret())
+            PgPool::connect_with(configuration.database.with_db())
                 .await
                 .expect("Failed to connect to Postgres.");
 

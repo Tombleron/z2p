@@ -1,7 +1,9 @@
 /// Module for configuration loading and processing
-use config::{Config, File};
+use config::{Config, Environment, File};
 use secrecy::{ExposeSecret, Secret};
 use serde::Deserialize;
+use serde_aux::field_attributes::deserialize_number_from_string;
+use sqlx::{postgres::PgConnectOptions, ConnectOptions};
 
 #[derive(Deserialize)]
 pub struct Configuration {
@@ -12,6 +14,7 @@ pub struct Configuration {
 #[derive(Deserialize)]
 pub struct ApplicationSettings {
     pub host: String,
+    #[serde(deserialize_with = "deserialize_number_from_string")]
     pub port: u16,
 }
 
@@ -19,33 +22,25 @@ pub struct ApplicationSettings {
 pub struct DatabaseConfig {
     pub username: String,
     pub password: Secret<String>,
+    #[serde(deserialize_with = "deserialize_number_from_string")]
     pub port: u16,
     pub host: String,
     pub database_name: String,
 }
 
 impl DatabaseConfig {
-    pub fn connection_string(&self) -> Secret<String> {
-        Secret::new(format!(
-            "postgres://{}:{}@{}:{}/{}",
-            self.username,
-            self.password.expose_secret(),
-            self.host,
-            self.port,
-            self.database_name
-        ))
+    pub fn without_db(&self) -> PgConnectOptions {
+        PgConnectOptions::new()
+            .host(&self.host)
+            .username(&self.username)
+            .password(&self.password.expose_secret())
+            .port(self.port)
     }
 
-    // Function for testing purposes
-    // Connects to db without specified database
-    pub fn connection_string_without_db(&self) -> Secret<String> {
-        Secret::new(format!(
-            "postgres://{}:{}@{}:{}",
-            self.username,
-            self.password.expose_secret(),
-            self.host,
-            self.port
-        ))
+    pub fn with_db(&self) -> PgConnectOptions {
+        let mut opt = self.without_db().database(&self.database_name);
+        opt.log_statements(tracing::log::LevelFilter::Trace);
+        opt
     }
 }
 
@@ -64,6 +59,7 @@ pub fn get_configuration() -> Result<Configuration, config::ConfigError> {
         .add_source(File::from(config_dir.join("base")))
         // Add in the current environment file
         .add_source(File::from(config_dir.join(environment.as_str())))
+        .add_source(Environment::with_prefix("app").separator("__"))
         .build()?;
 
     s.try_deserialize()
