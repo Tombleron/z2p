@@ -1,4 +1,3 @@
-use secrecy::ExposeSecret;
 use sqlx::postgres::PgPoolOptions;
 use z2p::{configuration::get_configuration, logging::*, run};
 
@@ -13,8 +12,7 @@ async fn main() -> std::io::Result<()> {
 
     let connection = PgPoolOptions::new()
         .acquire_timeout(std::time::Duration::from_secs(2))
-        .connect_lazy(config.database.connection_string().expose_secret())
-        .expect("Error connecting to db.");
+        .connect_lazy_with(config.database.with_db());
 
     run(&config, connection).await
 }
